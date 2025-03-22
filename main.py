@@ -117,7 +117,7 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Error loading file: {e}")
 else:
-    sample_option = st.sidebar.radio("No file uploaded. Choose a sample dataset:", options=["Wine", "Iris (Numeric Only)"])
+    sample_option = st.sidebar.radio("No file uploaded. Choose a sample dataset:", options=["Wine", "Iris (Numeric Only)"], key="sample_option")
     if sample_option == "Wine":
         data = load_wine()
         df = pd.DataFrame(data.data, columns=data.feature_names)
@@ -173,8 +173,8 @@ It evaluates whether a set of items consistently reflects an underlying construc
             rel_data = numeric_df[rel_items].copy()
             reverse_items = st.multiselect("Select reverse-coded items", options=rel_items, help="Choose items where higher scores indicate a lower level of the construct; they will be recoded accordingly.")
             if reverse_items:
-                scale_min = st.number_input("Enter scale minimum", value=1)
-                scale_max = st.number_input("Enter scale maximum", value=5)
+                scale_min = st.number_input("Enter scale minimum", value=1, key="rel_scale_min")
+                scale_max = st.number_input("Enter scale maximum", value=5, key="rel_scale_max")
                 for item in reverse_items:
                     rel_data[item] = scale_max + scale_min - rel_data[item]
 
@@ -206,7 +206,7 @@ It evaluates whether a set of items consistently reflects an underlying construc
             fig.colorbar(cax)
             st.pyplot(fig)
 
-            score_method = st.radio("Compute composite score by:", options=["Mean", "Sum", "None"])
+            score_method = st.radio("Compute composite score by:", options=["Mean", "Sum", "None"], key="score_method")
             if score_method != "None":
                 if score_method == "Mean":
                     numeric_df["Reliability_MeanScore"] = rel_data.mean(axis=1)
@@ -231,27 +231,43 @@ This technique simplifies complex datasets and helps reveal underlying patterns 
 **What is PCA?**  
 Principal Component Analysis (PCA) is a statistical method used to reduce the number of variables in a dataset while retaining as much information as possible.
 
-**Key Aspects:**  
-- **Extraction Methods:**  
-  - **Eigenvalue > 1:** Retain components with eigenvalues greater than 1.  
-  - **Fixed Number:** Specify the exact number of components to retain.  
-  - **Parallel Analysis:** Compare observed eigenvalues with those from random data.  
-- **Rotation (e.g., Varimax):** Enhances interpretability by simplifying the loadings.
-- **Purpose:** Ideal for data simplification, visualization, and uncovering underlying data structure.
+**Extraction Methods:**  
+- **Eigenvalue > 1:** Retain components with eigenvalues greater than 1. This method assumes that components capturing more variance than a single variable are meaningful.  
+- **Fixed Number:** Manually specify the number of components to retain, regardless of eigenvalues.  
+- **Parallel Analysis:** Compare observed eigenvalues with those from randomly generated data; only retain components that exceed random chance.
+
+**Rotation Options:**  
+- **None:** No rotation is applied.  
+- **Varimax:** An orthogonal rotation that simplifies the loadings so that each variable loads highly on one component and minimally on others, keeping components independent.
             """
         )
-    pca_vars = st.multiselect("Select variables for PCA (numeric columns only)", options=list(numeric_df.columns))
+    pca_vars = st.multiselect("Select variables for PCA (numeric columns only)", options=list(numeric_df.columns), key="pca_vars")
     if pca_vars:
         try:
             pca_data = numeric_df[pca_vars].dropna()
-            extraction_method = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"])
+            extraction_method = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"], key="pca_extraction")
+            # Provide explanation for each extraction method below the radio
+            st.markdown(
+                """
+                - **Eigenvalue > 1:** Retains components with eigenvalues > 1, assuming these capture more variance than a single variable.
+                - **Fixed number:** Allows you to manually select the number of components.
+                - **Parallel Analysis:** Compares your data's eigenvalues to those from random data to decide the number of components.
+                """
+            )
             fixed_components = None
             if extraction_method == "Fixed number":
-                fixed_components = st.number_input("Enter number of components", min_value=1, max_value=len(pca_vars), value=2, step=1)
-            rotation_method = st.radio("Rotation", options=["None", "Varimax"])
-            loading_cutoff = st.number_input("Factor loading cutoff", value=0.3, step=0.1)
-            sort_loadings = st.checkbox("Sort loadings", value=True)
-            if st.button("Run PCA"):
+                fixed_components = st.number_input("Enter number of components", min_value=1, max_value=len(pca_vars), value=2, step=1, key="pca_fixed")
+            rotation_method = st.radio("Rotation", options=["None", "Varimax"], key="pca_rotation")
+            # Provide explanation for rotation methods
+            st.markdown(
+                """
+                - **None:** No rotation applied.
+                - **Varimax:** Simplifies interpretation by rotating components so that each variable loads strongly on one component.
+                """
+            )
+            loading_cutoff = st.number_input("Factor loading cutoff", value=0.3, step=0.1, key="pca_cutoff")
+            sort_loadings = st.checkbox("Sort loadings", value=True, key="pca_sort")
+            if st.button("Run PCA", key="pca_run"):
                 scaler = StandardScaler()
                 data_scaled = scaler.fit_transform(pca_data)
                 pca_full = PCA(n_components=len(pca_vars))
@@ -305,25 +321,45 @@ This method is particularly useful in social sciences for revealing hidden const
 **What is EFA?**  
 Exploratory Factor Analysis (EFA) explores potential underlying factor structures without imposing a preconceived model.
 
-**Key Aspects:**  
-- **Extraction Methods:**  
-  - **Eigenvalue > 1:** Retain factors with eigenvalues greater than 1.  
-  - **Fixed Number:** Specify the number of factors manually.  
-  - **Parallel Analysis:** Use random data comparisons to decide on the number of factors.  
-- **Rotation Options:** Options like Oblimin or Promax allow factors to correlate, while Varimax assumes factors are orthogonal.
-- **Purpose:** EFA helps in identifying latent constructs that account for correlations among variables.
+**Extraction Methods:**  
+- **Eigenvalue > 1:** Retains factors with eigenvalues greater than 1, assuming that these factors account for more variance than a single variable.
+- **Fixed number:** You specify the exact number of factors to extract.
+- **Parallel Analysis:** Compares observed eigenvalues with those generated from random data; only factors exceeding the random eigenvalues are retained.
+
+**Rotation Options:**  
+- **None:** No rotation is applied.
+- **Varimax:** An orthogonal rotation that simplifies factor interpretation by forcing high loadings for a few variables per factor, keeping factors uncorrelated.
+- **Oblimin:** An oblique rotation that allows factors to correlate, often more realistic in social science where latent constructs are interrelated.
+- **Promax:** A computationally faster oblique rotation similar to Oblimin.
             """
         )
-    efa_vars = st.multiselect("Select variables for EFA (numeric columns only)", options=list(numeric_df.columns))
+    efa_vars = st.multiselect("Select variables for EFA (numeric columns only)", options=list(numeric_df.columns), key="efa_vars")
     if efa_vars:
         try:
             efa_data = numeric_df[efa_vars].dropna()
-            efa_extraction = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"])
+            efa_extraction = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"], key="efa_extraction")
+            # Extraction method explanation for EFA
+            st.markdown(
+                """
+                - **Eigenvalue > 1:** Retains factors with eigenvalues > 1.
+                - **Fixed number:** Allows you to manually choose the number of factors.
+                - **Parallel Analysis:** Uses random data comparisons to decide on the number of factors.
+                """
+            )
             efa_fixed = None
             if efa_extraction == "Fixed number":
-                efa_fixed = st.number_input("Enter number of factors", min_value=1, max_value=len(efa_vars), value=2, step=1)
-            efa_rotation = st.selectbox("Rotation", options=["None", "Varimax", "Oblimin", "Promax"])
-            if st.button("Run EFA"):
+                efa_fixed = st.number_input("Enter number of factors", min_value=1, max_value=len(efa_vars), value=2, step=1, key="efa_fixed")
+            efa_rotation = st.selectbox("Rotation", options=["None", "Varimax", "Oblimin", "Promax"], key="efa_rotation")
+            # Rotation explanation for EFA
+            st.markdown(
+                """
+                - **None:** No rotation applied.
+                - **Varimax:** Orthogonal rotation that simplifies factors by keeping them uncorrelated.
+                - **Oblimin:** Oblique rotation allowing factors to correlate, which may be more realistic in social sciences.
+                - **Promax:** A faster, approximate oblique rotation similar to Oblimin.
+                """
+            )
+            if st.button("Run EFA", key="efa_run"):
                 scaler = StandardScaler()
                 efa_scaled = scaler.fit_transform(efa_data)
                 pca_full = PCA(n_components=len(efa_vars))
