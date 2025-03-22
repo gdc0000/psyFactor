@@ -96,4 +96,3 @@ This project is licensed under the MIT License.
 ## Acknowledgements
 
 Thank you to the open-source community for providing the libraries and tools that made this project possible.
-```
