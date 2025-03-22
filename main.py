@@ -344,7 +344,7 @@ st.download_button(
 
 # ----- Footer -----
 st.markdown("---")
-st.markdown("### **Dr. Gabriele Di Cicco, PhD in Social Psychology**")
+st.markdown("### **Gabriele Di Cicco, PhD in Social Psychology**")
 st.markdown(
     """
 [GitHub](https://github.com/gdc0000) |  
