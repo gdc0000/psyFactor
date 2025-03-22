@@ -287,15 +287,19 @@ Principal Component Analysis (PCA) is a statistical method used to reduce the nu
                 st.write(f"Number of components selected: **{n_components}**")
                 pca = PCA(n_components=n_components)
                 pca_scores = pca.fit_transform(data_scaled)
+                # Compute raw loadings
                 loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
                 if rotation_method in ["Varimax", "Oblimin"]:
                     rotator = Rotator(method=rotation_method.lower())
                     loadings = rotator.fit_transform(loadings)
-                loadings_display = pd.DataFrame(loadings, index=pca_vars,
-                                                columns=[f"Component {i+1}" for i in range(n_components)])
-                loadings_display = loadings_display.where(loadings_display.abs() >= loading_cutoff, "")
+                # Create a DataFrame of loadings using the numeric (non-modified) values for sorting
+                loadings_df = pd.DataFrame(loadings, index=pca_vars,
+                                             columns=[f"Component {i+1}" for i in range(n_components)])
                 if sort_loadings:
-                    loadings_display = loadings_display.reindex(loadings_display.abs().max(axis=1).sort_values(ascending=False).index)
+                    loadings_df = loadings_df.reindex(loadings_df.abs().max(axis=1).sort_values(ascending=False).index)
+                # Prepare display version: replace values below cutoff with empty strings
+                display_loadings = loadings_df.where(loadings_df.abs() >= loading_cutoff)
+                display_loadings = display_loadings.fillna("")
                 st.subheader("Scree Plot")
                 fig, ax = plt.subplots()
                 ax.plot(range(1, len(eigenvalues) + 1), eigenvalues, marker="o")
@@ -303,7 +307,7 @@ Principal Component Analysis (PCA) is a statistical method used to reduce the nu
                 ax.set_ylabel("Eigenvalue")
                 st.pyplot(fig)
                 st.subheader("Component Loadings")
-                st.dataframe(loadings_display)
+                st.dataframe(display_loadings)
                 if st.button("Append PCA Scores to Dataset", key="append_pca"):
                     for i in range(n_components):
                         numeric_df[f"PCA_Component_{i+1}"] = pca_scores[:, i]
