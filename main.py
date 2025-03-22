@@ -5,9 +5,11 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from factor_analyzer import FactorAnalyzer
+from factor_analyzer.rotator import Rotator
 import pyreadstat
 from io import BytesIO
 import base64
+from sklearn.datasets import load_wine, load_iris, load_diabetes, fetch_california_housing
 
 st.set_page_config(page_title="Factor and Dimensionality Reduction Explorer", layout="wide")
 
@@ -57,22 +59,6 @@ def alpha_if_item_dropped(df):
         st.error(f"Error computing 'alpha if item dropped': {e}")
     return alphas
 
-def varimax(Phi, gamma=1.0, q=20, tol=1e-6):
-    p, k = Phi.shape
-    R = np.eye(k)
-    d = 0
-    for i in range(q):
-        d_old = d
-        Lambda = np.dot(Phi, R)
-        u, s, vh = np.linalg.svd(
-            np.dot(Phi.T, np.asarray(Lambda)**3 - (gamma / p) * np.dot(Lambda, np.diag(np.diag(np.dot(Lambda.T, Lambda)))))
-        )
-        R = np.dot(u, vh)
-        d = np.sum(s)
-        if d_old != 0 and d/d_old < 1 + tol:
-            break
-    return np.dot(Phi, R)
-
 def parallel_analysis(data, n_iter=100, random_state=42):
     n_samples, n_vars = data.shape
     rng = np.random.RandomState(random_state)
@@ -97,7 +83,7 @@ In social sciences, **factor analysis** uncovers latent constructs underlying ob
     """
 )
 
-# ----- Sidebar: Data Upload and Sample Dataset Selection -----
+# ----- Sidebar: Data Upload and Sample Datasets -----
 st.sidebar.header("1. Upload Data")
 uploaded_file = st.sidebar.file_uploader("Upload your CSV, Excel, or SPSS (.sav) file", type=["csv", "xlsx", "xls", "sav"])
 df = None
@@ -117,36 +103,26 @@ if uploaded_file is not None:
         st.error(f"Error loading file: {e}")
 else:
     sample_option = st.sidebar.radio(
-        "No file uploaded. Choose a sample regression dataset:",
-        options=["Diabetes", "California Housing", "Linnerud", "Boston Housing", "Make Regression"],
+        "No file uploaded. Choose a sample dataset:",
+        options=["Wine", "Iris (Numeric Only)", "Diabetes", "California Housing"],
         key="sample_option"
     )
-    if sample_option == "Diabetes":
-        from sklearn.datasets import load_diabetes
+    if sample_option == "Wine":
+        data = load_wine()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        st.sidebar.success("Wine dataset loaded!")
+    elif sample_option == "Iris (Numeric Only)":
+        data = load_iris()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        st.sidebar.success("Iris dataset loaded!")
+    elif sample_option == "Diabetes":
         data = load_diabetes()
         df = pd.DataFrame(data.data, columns=data.feature_names)
         st.sidebar.success("Diabetes dataset loaded!")
     elif sample_option == "California Housing":
-        from sklearn.datasets import fetch_california_housing
         data = fetch_california_housing()
         df = pd.DataFrame(data.data, columns=data.feature_names)
         st.sidebar.success("California Housing dataset loaded!")
-    elif sample_option == "Linnerud":
-        from sklearn.datasets import load_linnerud
-        data = load_linnerud()
-        df = pd.DataFrame(data.data, columns=data.feature_names)
-        st.sidebar.success("Linnerud dataset loaded!")
-    elif sample_option == "Boston Housing":
-        # Note: Boston Housing dataset is deprecated in recent versions of scikit-learn.
-        from sklearn.datasets import load_boston
-        data = load_boston()
-        df = pd.DataFrame(data.data, columns=data.feature_names)
-        st.sidebar.success("Boston Housing dataset loaded!")
-    elif sample_option == "Make Regression":
-        from sklearn.datasets import make_regression
-        X, y = make_regression(n_samples=100, n_features=10, noise=0.1, random_state=42)
-        df = pd.DataFrame(X, columns=[f"Feature {i+1}" for i in range(X.shape[1])])
-        st.sidebar.success("Synthetic regression dataset loaded!")
 
 if df is not None:
     # Only keep numeric columns for analysis
@@ -185,7 +161,7 @@ It evaluates whether a set of items consistently reflects an underlying construc
 **Key Metrics Explained:**  
 - **Cronbach’s α:** Values above 0.7 are typically acceptable, indicating good internal consistency.  
 - **McDonald’s ω:** Often more robust, especially when the assumption of equal factor loadings (tau-equivalence) is violated.  
-- **Item-rest correlations and Alpha if item dropped:** Help identify items that may detract from the overall scale's consistency.
+- **Item-rest correlations and Alpha if item dropped:** Assist in identifying items that may not fit well within the overall scale.
             """
         )
     rel_items = st.multiselect("Select items for analysis (numeric columns only)", options=list(numeric_df.columns), default=list(numeric_df.columns))
@@ -228,12 +204,18 @@ It evaluates whether a set of items consistently reflects an underlying construc
             st.pyplot(fig)
 
             score_method = st.radio("Compute composite score by:", options=["Mean", "Sum", "None"], key="score_method")
+            composite_score = None
             if score_method != "None":
                 if score_method == "Mean":
-                    numeric_df["Reliability_MeanScore"] = rel_data.mean(axis=1)
+                    composite_score = rel_data.mean(axis=1)
                 else:
-                    numeric_df["Reliability_SumScore"] = rel_data.sum(axis=1)
-                st.success(f"{score_method} score computed and added to the dataset.")
+                    composite_score = rel_data.sum(axis=1)
+                st.write("Composite Score Preview:")
+                st.dataframe(composite_score.head())
+                if st.button("Append Composite Score to Dataset", key="append_reliability"):
+                    col_name = f"Reliability_{score_method}Score"
+                    numeric_df[col_name] = composite_score
+                    st.success(f"Composite score '{col_name}' appended to the dataset.")
         except Exception as e:
             st.error(f"An error occurred during Reliability Analysis: {e}")
 
@@ -244,22 +226,23 @@ with tabs[1]:
         """
 **PCA** reduces the dimensionality of your data by creating new, uncorrelated components that capture most of the variance.  
 This technique simplifies complex datasets and helps reveal underlying patterns by transforming correlated variables into a smaller set of components.
-    """
+        """
     )
     with st.expander("Learn more about PCA"):
         st.markdown(
             """
 **What is PCA?**  
-Principal Component Analysis (PCA) is a method used to reduce the number of variables while retaining as much variability as possible.
+Principal Component Analysis (PCA) is a statistical method used to reduce the number of variables in a dataset while retaining as much information as possible.
 
 **Extraction Methods:**  
-- **Eigenvalue > 1:** Retains components with eigenvalues greater than 1, under the assumption that a component should capture more variance than an individual variable.
-- **Fixed number:** Allows you to specify a predetermined number of components.
-- **Parallel Analysis:** Compares the data's eigenvalues to those from random data and retains only those components that exceed the random thresholds.
+- **Eigenvalue > 1:** Retain components with eigenvalues greater than 1, assuming these capture more variance than a single variable.  
+- **Fixed Number:** Manually specify the number of components to retain, regardless of eigenvalues.  
+- **Parallel Analysis:** Compare observed eigenvalues with those from randomly generated data; only retain components that exceed random chance.
 
 **Rotation Options:**  
-- **None:** No rotation is applied.
-- **Varimax:** An orthogonal rotation that simplifies interpretation by forcing variables to load highly on one component while minimizing cross-loadings.
+- **None:** No rotation applied.  
+- **Varimax:** An orthogonal rotation that simplifies the loadings so that each variable loads strongly on one component, keeping components uncorrelated.  
+- **Oblimin:** An oblique rotation that allows components to correlate, which can be more realistic in social science data.
             """
         )
     pca_vars = st.multiselect("Select variables for PCA (numeric columns only)", options=list(numeric_df.columns), key="pca_vars")
@@ -269,19 +252,20 @@ Principal Component Analysis (PCA) is a method used to reduce the number of vari
             extraction_method = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"], key="pca_extraction")
             st.markdown(
                 """
-                - **Eigenvalue > 1:** Retains components with eigenvalues greater than 1.
-                - **Fixed number:** Manually select the number of components.
-                - **Parallel Analysis:** Compares your eigenvalues to those from random data.
+                - **Eigenvalue > 1:** Retains components with eigenvalues > 1.
+                - **Fixed number:** Allows you to manually select the number of components.
+                - **Parallel Analysis:** Compares your data's eigenvalues to those from random data.
                 """
             )
             fixed_components = None
             if extraction_method == "Fixed number":
                 fixed_components = st.number_input("Enter number of components", min_value=1, max_value=len(pca_vars), value=2, step=1, key="pca_fixed")
-            rotation_method = st.radio("Rotation", options=["None", "Varimax"], key="pca_rotation")
+            rotation_method = st.radio("Rotation", options=["None", "Varimax", "Oblimin"], key="pca_rotation")
             st.markdown(
                 """
                 - **None:** No rotation applied.
-                - **Varimax:** Simplifies interpretation by rotating components so that each variable loads highly on one component.
+                - **Varimax:** Orthogonal rotation simplifying component interpretation.
+                - **Oblimin:** Oblique rotation allowing components to correlate.
                 """
             )
             loading_cutoff = st.number_input("Factor loading cutoff", value=0.3, step=0.1, key="pca_cutoff")
@@ -304,8 +288,9 @@ Principal Component Analysis (PCA) is a method used to reduce the number of vari
                 pca = PCA(n_components=n_components)
                 pca_scores = pca.fit_transform(data_scaled)
                 loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
-                if rotation_method == "Varimax":
-                    loadings = varimax(loadings)
+                if rotation_method in ["Varimax", "Oblimin"]:
+                    rotator = Rotator(method=rotation_method.lower())
+                    loadings = rotator.fit_transform(loadings)
                 loadings_display = pd.DataFrame(loadings, index=pca_vars,
                                                 columns=[f"Component {i+1}" for i in range(n_components)])
                 loadings_display = loadings_display.where(loadings_display.abs() >= loading_cutoff, "")
@@ -319,9 +304,10 @@ Principal Component Analysis (PCA) is a method used to reduce the number of vari
                 st.pyplot(fig)
                 st.subheader("Component Loadings")
                 st.dataframe(loadings_display)
-                for i in range(n_components):
-                    numeric_df[f"PCA_Component_{i+1}"] = pca_scores[:, i]
-                st.success("PCA scores have been added to the dataset.")
+                if st.button("Append PCA Scores to Dataset", key="append_pca"):
+                    for i in range(n_components):
+                        numeric_df[f"PCA_Component_{i+1}"] = pca_scores[:, i]
+                    st.success("PCA scores appended to the dataset.")
         except Exception as e:
             st.error(f"An error occurred during PCA: {e}")
 
@@ -332,24 +318,24 @@ with tabs[2]:
         """
 **EFA** uncovers the underlying structure of a set of variables by identifying latent factors that explain observed correlations.  
 This method is particularly useful in social sciences for revealing hidden constructs (such as attitudes or personality traits) that influence measured responses.
-    """
+        """
     )
     with st.expander("Learn more about EFA"):
         st.markdown(
             """
 **What is EFA?**  
-Exploratory Factor Analysis (EFA) is used to explore potential factor structures without imposing a preconceived model.
+Exploratory Factor Analysis (EFA) explores potential underlying factor structures without imposing a preconceived model.
 
 **Extraction Methods:**  
-- **Eigenvalue > 1:** Retains factors with eigenvalues > 1, assuming each factor should explain more variance than a single variable.
+- **Eigenvalue > 1:** Retains factors with eigenvalues greater than 1, assuming these account for more variance than a single variable.
 - **Fixed number:** Manually specify the number of factors to extract.
-- **Parallel Analysis:** Retains factors whose eigenvalues exceed those derived from random data.
+- **Parallel Analysis:** Compares observed eigenvalues with those generated from random data; only factors exceeding random eigenvalues are retained.
 
 **Rotation Options:**  
-- **None:** No rotation is applied.
-- **Varimax:** An orthogonal rotation that keeps factors uncorrelated while simplifying interpretation.
-- **Oblimin:** An oblique rotation allowing factors to correlate; useful when underlying constructs are expected to be interrelated.
-- **Promax:** A computationally faster, approximate oblique rotation similar to Oblimin.
+- **None:** No rotation applied.
+- **Varimax:** An orthogonal rotation that keeps factors uncorrelated, simplifying interpretation.
+- **Oblimin:** An oblique rotation that allows factors to correlate, often more realistic in social sciences.
+- **Promax:** A faster oblique rotation similar to Oblimin.
             """
         )
     efa_vars = st.multiselect("Select variables for EFA (numeric columns only)", options=list(numeric_df.columns), key="efa_vars")
@@ -360,8 +346,8 @@ Exploratory Factor Analysis (EFA) is used to explore potential factor structures
             st.markdown(
                 """
                 - **Eigenvalue > 1:** Retains factors with eigenvalues > 1.
-                - **Fixed number:** Manually select the number of factors.
-                - **Parallel Analysis:** Uses random data comparisons to determine factor retention.
+                - **Fixed number:** Allows you to manually choose the number of factors.
+                - **Parallel Analysis:** Uses random data comparisons to decide on the number of factors.
                 """
             )
             efa_fixed = None
@@ -371,8 +357,8 @@ Exploratory Factor Analysis (EFA) is used to explore potential factor structures
             st.markdown(
                 """
                 - **None:** No rotation applied.
-                - **Varimax:** Orthogonal rotation that keeps factors uncorrelated.
-                - **Oblimin:** Oblique rotation that allows factors to correlate; ideal when constructs are expected to interact.
+                - **Varimax:** Orthogonal rotation keeping factors uncorrelated.
+                - **Oblimin:** Oblique rotation allowing factors to correlate.
                 - **Promax:** A faster, approximate oblique rotation similar to Oblimin.
                 """
             )
@@ -419,13 +405,14 @@ Exploratory Factor Analysis (EFA) is used to explore potential factor structures
                 }, index=[f"Factor {i+1}" for i in range(n_factors)])
                 st.subheader("Variance Explained by Factors")
                 st.dataframe(fit_df)
-                try:
-                    efa_scores = fa.transform(efa_data)
-                    for i in range(n_factors):
-                        numeric_df[f"EFA_Factor_{i+1}"] = efa_scores[:, i]
-                    st.success("EFA factor scores have been added to the dataset.")
-                except Exception as e:
-                    st.error(f"Could not compute factor scores: {e}")
+                if st.button("Append EFA Factor Scores to Dataset", key="append_efa"):
+                    try:
+                        efa_scores = fa.transform(efa_data)
+                        for i in range(n_factors):
+                            numeric_df[f"EFA_Factor_{i+1}"] = efa_scores[:, i]
+                        st.success("EFA factor scores appended to the dataset.")
+                    except Exception as e:
+                        st.error(f"Could not compute factor scores: {e}")
         except Exception as e:
             st.error(f"An error occurred during EFA: {e}")
 
