@@ -8,6 +8,7 @@ from factor_analyzer import FactorAnalyzer
 import pyreadstat
 from io import BytesIO
 import base64
+from sklearn.datasets import load_wine, load_iris
 
 st.set_page_config(page_title="Factor and Dimensionality Reduction Explorer", layout="wide")
 
@@ -92,8 +93,8 @@ def convert_df_to_csv(df):
 st.title("Factor and Dimensionality Reduction Explorer")
 st.markdown(
     """
-**Dimensionality reduction** is the process of simplifying complex datasets by reducing the number of variables while retaining essential information.  
-In social sciences, **factor analysis** is a key technique that uncovers latent constructs (factors) underlying observed variables, helping researchers interpret and understand data patterns.
+**Dimensionality reduction** simplifies complex datasets by reducing the number of variables while retaining essential information.  
+In social sciences, **factor analysis** uncovers latent constructs underlying observed data, enabling researchers to interpret patterns and relationships with clarity and rigor.
     """
 )
 
@@ -116,12 +117,15 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Error loading file: {e}")
 else:
-    st.sidebar.info("Using demo dataset (100 cases, 10 items).")
-    np.random.seed(0)
-    df = pd.DataFrame(
-        np.random.randint(1, 6, size=(100, 10)),
-        columns=[f"Q{i}" for i in range(1, 11)]
-    )
+    sample_option = st.sidebar.radio("No file uploaded. Choose a sample dataset:", options=["Wine", "Iris (Numeric Only)"])
+    if sample_option == "Wine":
+        data = load_wine()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        st.sidebar.success("Wine dataset loaded!")
+    elif sample_option == "Iris (Numeric Only)":
+        data = load_iris()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        st.sidebar.success("Iris dataset loaded!")
 
 if df is not None:
     # Only keep numeric columns for analysis
@@ -145,22 +149,22 @@ with tabs[0]:
     st.markdown(
         """
 **Reliability Analysis** assesses the internal consistency of a set of items (e.g., survey questions).  
-- **Cronbach’s α** estimates how closely related the items are.  
-- **McDonald’s ω** considers the factor structure and provides an alternative measure.  
-- **Item-rest correlations** reveal how each item correlates with the total score from other items.  
-- **Alpha if item dropped** shows how the overall reliability would change if an item were removed.  
-    """
+- **Cronbach’s α** estimates the degree to which items measure the same construct.  
+- **McDonald’s ω** provides a more nuanced reliability estimate by considering the factor structure.  
+- **Item-rest correlations** reveal how well each item correlates with the overall scale.  
+- **Alpha if item dropped** shows the impact on reliability when an item is removed.
+        """
     )
     with st.expander("Learn more about Reliability Analysis"):
         st.markdown(
             """
 **What is Reliability Analysis?**  
-Reliability analysis examines the extent to which a set of items measures a single unidimensional latent construct. High reliability indicates that the items consistently reflect the underlying construct.  
-        
-**Key Methods:**  
-- **Cronbach’s α:** A widely used metric where values above 0.7 are generally considered acceptable.  
-- **McDonald’s ω:** Often seen as a more robust alternative, especially when the assumption of tau-equivalence is violated.  
-- **Item-rest correlations and Alpha if item dropped:** These help identify problematic items that may not align well with the overall scale.
+It evaluates whether a set of items consistently reflects an underlying construct. High reliability implies that items are coherent and measure the same phenomenon.
+
+**Key Metrics Explained:**  
+- **Cronbach’s α:** Values above 0.7 are typically acceptable, indicating good internal consistency.  
+- **McDonald’s ω:** Often more robust, especially when the assumption of equal factor loadings (tau-equivalence) is violated.  
+- **Item-rest correlations and Alpha if item dropped:** Assist in identifying items that may not fit well within the overall scale.
             """
         )
     rel_items = st.multiselect("Select items for analysis (numeric columns only)", options=list(numeric_df.columns), default=list(numeric_df.columns))
@@ -225,15 +229,15 @@ This technique simplifies complex datasets and helps reveal underlying patterns 
         st.markdown(
             """
 **What is PCA?**  
-Principal Component Analysis (PCA) is a mathematical technique used to reduce the number of variables in a dataset while retaining as much information as possible.  
-        
-**Key Points:**  
+Principal Component Analysis (PCA) is a statistical method used to reduce the number of variables in a dataset while retaining as much information as possible.
+
+**Key Aspects:**  
 - **Extraction Methods:**  
-  - **Eigenvalue > 1:** Only keep components with eigenvalues greater than 1.  
-  - **Fixed Number:** Specify the number of components to retain.  
-  - **Parallel Analysis:** Compare the eigenvalues with those obtained from random data.  
-- **Rotation (e.g., Varimax):** Helps simplify the interpretation by maximizing the variance of the loadings.
-- **Purpose:** PCA is ideal when you want to simplify data for visualization or further analysis without losing critical information.
+  - **Eigenvalue > 1:** Retain components with eigenvalues greater than 1.  
+  - **Fixed Number:** Specify the exact number of components to retain.  
+  - **Parallel Analysis:** Compare observed eigenvalues with those from random data.  
+- **Rotation (e.g., Varimax):** Enhances interpretability by simplifying the loadings.
+- **Purpose:** Ideal for data simplification, visualization, and uncovering underlying data structure.
             """
         )
     pca_vars = st.multiselect("Select variables for PCA (numeric columns only)", options=list(numeric_df.columns))
@@ -292,22 +296,22 @@ with tabs[2]:
     st.markdown(
         """
 **EFA** uncovers the underlying structure of a set of variables by identifying latent factors that explain observed correlations.  
-This method is particularly useful in social sciences for revealing hidden constructs (like attitudes or personality traits) that influence measured responses.
+This method is particularly useful in social sciences for revealing hidden constructs (such as attitudes or personality traits) that influence measured responses.
     """
     )
     with st.expander("Learn more about EFA"):
         st.markdown(
             """
 **What is EFA?**  
-Exploratory Factor Analysis (EFA) is used to explore the possible underlying factor structure of a set of observed variables without imposing a preconceived structure on the outcome.  
-        
-**Key Points:**  
+Exploratory Factor Analysis (EFA) explores potential underlying factor structures without imposing a preconceived model.
+
+**Key Aspects:**  
 - **Extraction Methods:**  
   - **Eigenvalue > 1:** Retain factors with eigenvalues greater than 1.  
-  - **Fixed Number:** Specify the number of factors.  
-  - **Parallel Analysis:** Use random data to help decide the number of factors.
-- **Rotation Options:** Such as Oblimin or Promax, which allow factors to correlate, or Varimax, which assumes orthogonality.
-- **Purpose:** EFA is ideal when you want to explore and identify latent constructs that explain the relationships among variables.
+  - **Fixed Number:** Specify the number of factors manually.  
+  - **Parallel Analysis:** Use random data comparisons to decide on the number of factors.  
+- **Rotation Options:** Options like Oblimin or Promax allow factors to correlate, while Varimax assumes factors are orthogonal.
+- **Purpose:** EFA helps in identifying latent constructs that account for correlations among variables.
             """
         )
     efa_vars = st.multiselect("Select variables for EFA (numeric columns only)", options=list(numeric_df.columns))
