@@ -8,7 +8,6 @@ from factor_analyzer import FactorAnalyzer
 import pyreadstat
 from io import BytesIO
 import base64
-from sklearn.datasets import load_wine, load_iris
 
 st.set_page_config(page_title="Factor and Dimensionality Reduction Explorer", layout="wide")
 
@@ -98,7 +97,7 @@ In social sciences, **factor analysis** uncovers latent constructs underlying ob
     """
 )
 
-# ----- Sidebar: Data Upload -----
+# ----- Sidebar: Data Upload and Sample Dataset Selection -----
 st.sidebar.header("1. Upload Data")
 uploaded_file = st.sidebar.file_uploader("Upload your CSV, Excel, or SPSS (.sav) file", type=["csv", "xlsx", "xls", "sav"])
 df = None
@@ -117,15 +116,37 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Error loading file: {e}")
 else:
-    sample_option = st.sidebar.radio("No file uploaded. Choose a sample dataset:", options=["Wine", "Iris (Numeric Only)"], key="sample_option")
-    if sample_option == "Wine":
-        data = load_wine()
+    sample_option = st.sidebar.radio(
+        "No file uploaded. Choose a sample regression dataset:",
+        options=["Diabetes", "California Housing", "Linnerud", "Boston Housing", "Make Regression"],
+        key="sample_option"
+    )
+    if sample_option == "Diabetes":
+        from sklearn.datasets import load_diabetes
+        data = load_diabetes()
         df = pd.DataFrame(data.data, columns=data.feature_names)
-        st.sidebar.success("Wine dataset loaded!")
-    elif sample_option == "Iris (Numeric Only)":
-        data = load_iris()
+        st.sidebar.success("Diabetes dataset loaded!")
+    elif sample_option == "California Housing":
+        from sklearn.datasets import fetch_california_housing
+        data = fetch_california_housing()
         df = pd.DataFrame(data.data, columns=data.feature_names)
-        st.sidebar.success("Iris dataset loaded!")
+        st.sidebar.success("California Housing dataset loaded!")
+    elif sample_option == "Linnerud":
+        from sklearn.datasets import load_linnerud
+        data = load_linnerud()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        st.sidebar.success("Linnerud dataset loaded!")
+    elif sample_option == "Boston Housing":
+        # Note: Boston Housing dataset is deprecated in recent versions of scikit-learn.
+        from sklearn.datasets import load_boston
+        data = load_boston()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        st.sidebar.success("Boston Housing dataset loaded!")
+    elif sample_option == "Make Regression":
+        from sklearn.datasets import make_regression
+        X, y = make_regression(n_samples=100, n_features=10, noise=0.1, random_state=42)
+        df = pd.DataFrame(X, columns=[f"Feature {i+1}" for i in range(X.shape[1])])
+        st.sidebar.success("Synthetic regression dataset loaded!")
 
 if df is not None:
     # Only keep numeric columns for analysis
@@ -164,7 +185,7 @@ It evaluates whether a set of items consistently reflects an underlying construc
 **Key Metrics Explained:**  
 - **Cronbach’s α:** Values above 0.7 are typically acceptable, indicating good internal consistency.  
 - **McDonald’s ω:** Often more robust, especially when the assumption of equal factor loadings (tau-equivalence) is violated.  
-- **Item-rest correlations and Alpha if item dropped:** Assist in identifying items that may not fit well within the overall scale.
+- **Item-rest correlations and Alpha if item dropped:** Help identify items that may detract from the overall scale's consistency.
             """
         )
     rel_items = st.multiselect("Select items for analysis (numeric columns only)", options=list(numeric_df.columns), default=list(numeric_df.columns))
@@ -229,16 +250,16 @@ This technique simplifies complex datasets and helps reveal underlying patterns 
         st.markdown(
             """
 **What is PCA?**  
-Principal Component Analysis (PCA) is a statistical method used to reduce the number of variables in a dataset while retaining as much information as possible.
+Principal Component Analysis (PCA) is a method used to reduce the number of variables while retaining as much variability as possible.
 
 **Extraction Methods:**  
-- **Eigenvalue > 1:** Retain components with eigenvalues greater than 1. This method assumes that components capturing more variance than a single variable are meaningful.  
-- **Fixed Number:** Manually specify the number of components to retain, regardless of eigenvalues.  
-- **Parallel Analysis:** Compare observed eigenvalues with those from randomly generated data; only retain components that exceed random chance.
+- **Eigenvalue > 1:** Retains components with eigenvalues greater than 1, under the assumption that a component should capture more variance than an individual variable.
+- **Fixed number:** Allows you to specify a predetermined number of components.
+- **Parallel Analysis:** Compares the data's eigenvalues to those from random data and retains only those components that exceed the random thresholds.
 
 **Rotation Options:**  
-- **None:** No rotation is applied.  
-- **Varimax:** An orthogonal rotation that simplifies the loadings so that each variable loads highly on one component and minimally on others, keeping components independent.
+- **None:** No rotation is applied.
+- **Varimax:** An orthogonal rotation that simplifies interpretation by forcing variables to load highly on one component while minimizing cross-loadings.
             """
         )
     pca_vars = st.multiselect("Select variables for PCA (numeric columns only)", options=list(numeric_df.columns), key="pca_vars")
@@ -246,23 +267,21 @@ Principal Component Analysis (PCA) is a statistical method used to reduce the nu
         try:
             pca_data = numeric_df[pca_vars].dropna()
             extraction_method = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"], key="pca_extraction")
-            # Provide explanation for each extraction method below the radio
             st.markdown(
                 """
-                - **Eigenvalue > 1:** Retains components with eigenvalues > 1, assuming these capture more variance than a single variable.
-                - **Fixed number:** Allows you to manually select the number of components.
-                - **Parallel Analysis:** Compares your data's eigenvalues to those from random data to decide the number of components.
+                - **Eigenvalue > 1:** Retains components with eigenvalues greater than 1.
+                - **Fixed number:** Manually select the number of components.
+                - **Parallel Analysis:** Compares your eigenvalues to those from random data.
                 """
             )
             fixed_components = None
             if extraction_method == "Fixed number":
                 fixed_components = st.number_input("Enter number of components", min_value=1, max_value=len(pca_vars), value=2, step=1, key="pca_fixed")
             rotation_method = st.radio("Rotation", options=["None", "Varimax"], key="pca_rotation")
-            # Provide explanation for rotation methods
             st.markdown(
                 """
                 - **None:** No rotation applied.
-                - **Varimax:** Simplifies interpretation by rotating components so that each variable loads strongly on one component.
+                - **Varimax:** Simplifies interpretation by rotating components so that each variable loads highly on one component.
                 """
             )
             loading_cutoff = st.number_input("Factor loading cutoff", value=0.3, step=0.1, key="pca_cutoff")
@@ -319,18 +338,18 @@ This method is particularly useful in social sciences for revealing hidden const
         st.markdown(
             """
 **What is EFA?**  
-Exploratory Factor Analysis (EFA) explores potential underlying factor structures without imposing a preconceived model.
+Exploratory Factor Analysis (EFA) is used to explore potential factor structures without imposing a preconceived model.
 
 **Extraction Methods:**  
-- **Eigenvalue > 1:** Retains factors with eigenvalues greater than 1, assuming that these factors account for more variance than a single variable.
-- **Fixed number:** You specify the exact number of factors to extract.
-- **Parallel Analysis:** Compares observed eigenvalues with those generated from random data; only factors exceeding the random eigenvalues are retained.
+- **Eigenvalue > 1:** Retains factors with eigenvalues > 1, assuming each factor should explain more variance than a single variable.
+- **Fixed number:** Manually specify the number of factors to extract.
+- **Parallel Analysis:** Retains factors whose eigenvalues exceed those derived from random data.
 
 **Rotation Options:**  
 - **None:** No rotation is applied.
-- **Varimax:** An orthogonal rotation that simplifies factor interpretation by forcing high loadings for a few variables per factor, keeping factors uncorrelated.
-- **Oblimin:** An oblique rotation that allows factors to correlate, often more realistic in social science where latent constructs are interrelated.
-- **Promax:** A computationally faster oblique rotation similar to Oblimin.
+- **Varimax:** An orthogonal rotation that keeps factors uncorrelated while simplifying interpretation.
+- **Oblimin:** An oblique rotation allowing factors to correlate; useful when underlying constructs are expected to be interrelated.
+- **Promax:** A computationally faster, approximate oblique rotation similar to Oblimin.
             """
         )
     efa_vars = st.multiselect("Select variables for EFA (numeric columns only)", options=list(numeric_df.columns), key="efa_vars")
@@ -338,24 +357,22 @@ Exploratory Factor Analysis (EFA) explores potential underlying factor structure
         try:
             efa_data = numeric_df[efa_vars].dropna()
             efa_extraction = st.radio("Extraction method", options=["Eigenvalue > 1", "Fixed number", "Parallel Analysis"], key="efa_extraction")
-            # Extraction method explanation for EFA
             st.markdown(
                 """
                 - **Eigenvalue > 1:** Retains factors with eigenvalues > 1.
-                - **Fixed number:** Allows you to manually choose the number of factors.
-                - **Parallel Analysis:** Uses random data comparisons to decide on the number of factors.
+                - **Fixed number:** Manually select the number of factors.
+                - **Parallel Analysis:** Uses random data comparisons to determine factor retention.
                 """
             )
             efa_fixed = None
             if efa_extraction == "Fixed number":
                 efa_fixed = st.number_input("Enter number of factors", min_value=1, max_value=len(efa_vars), value=2, step=1, key="efa_fixed")
             efa_rotation = st.selectbox("Rotation", options=["None", "Varimax", "Oblimin", "Promax"], key="efa_rotation")
-            # Rotation explanation for EFA
             st.markdown(
                 """
                 - **None:** No rotation applied.
-                - **Varimax:** Orthogonal rotation that simplifies factors by keeping them uncorrelated.
-                - **Oblimin:** Oblique rotation allowing factors to correlate, which may be more realistic in social sciences.
+                - **Varimax:** Orthogonal rotation that keeps factors uncorrelated.
+                - **Oblimin:** Oblique rotation that allows factors to correlate; ideal when constructs are expected to interact.
                 - **Promax:** A faster, approximate oblique rotation similar to Oblimin.
                 """
             )
